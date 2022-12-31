@@ -1,5 +1,5 @@
 # trading-tool
-This is my first python project built in August 2022
+This is my first python project built in August 2022. Code is not efficient since I was new in programming. There are a lot of codes need to optimize.
 # Note
 Due to FTX(was second big crypto exchange) collapsed on November 9th 2022. This software is no longer usable.
 However, live market chart is still working
