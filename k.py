@@ -55,6 +55,7 @@ class RectItem(pg.GraphicsObject):
         self.hline4.sigDragged.connect(self.handle_sig_dragged3)
         self.generate_picture()
 
+    # general idea is from https://blog.csdn.net/u010580016/article/details/121584523
     def generate_picture(self):
         self.painter = QtGui.QPainter(self.picture)
         self.w = (self.data[1][0] - self.data[0][0]) / 3
