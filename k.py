@@ -1,15 +1,18 @@
 import sys
 import time
 from threading import *
+import cv2
+import numpy as np
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
+from pyqtgraph.exporters import ImageExporter
 import datetime
-from PyQt5.QtCore import Qt, QPointF
+from PyQt5.QtCore import Qt, QPointF, QRectF
 from binance.spot import futures, Spot
 
 
 class RectItem(pg.GraphicsObject):
-    def __init__(self, data):
+    def __init__(self, data, parent):
         super().__init__()
         self.data = data
         self.w = None
@@ -17,6 +20,7 @@ class RectItem(pg.GraphicsObject):
         self.toggle = False
         self.highest = 0
         self.lowest = 0
+        self.parent = parent
         self.rect = QtCore.QRectF(0, 0, 1, 1)
         self.picture = QtGui.QPicture()
         self.pen0 = pg.mkPen(color=(0, 0, 0), width=1, style=QtCore.Qt.DotLine)
@@ -81,6 +85,19 @@ class RectItem(pg.GraphicsObject):
 
     def paint(self, painter, option, widget=None):
         painter.drawPicture(0, 0, self.picture)
+        array = self.convert_painting_2_array(self.parent)
+
+    def convert_painting_2_array(self, parent):
+        item = parent.getViewBox().allChildren(item=self)
+        exporter = ImageExporter(item[0])
+        data = exporter.export(toBytes=True)
+        img = data.convertToFormat(QtGui.QImage.Format_RGBA8888)
+        ptr = img.constBits()
+        ptr.setsize(img.byteCount())
+        width = img.width()
+        height = img.height()
+        arr = np.array(ptr).reshape(height, width, 4)
+        return arr
 
     def handle_sig_dragged(self,obj):
         self.hline2.setCursor(self.cursor)
@@ -143,9 +160,7 @@ class RectItem(pg.GraphicsObject):
         self.hline3.show()
 
 
-
 class PlotWidget(pg.PlotWidget):
-
     mouse_moved = QtCore.pyqtSignal(str, list, list)
     mouse_moved2 = QtCore.pyqtSignal(list)
     mouse_moved3 = QtCore.pyqtSignal(QPointF)
@@ -268,7 +283,7 @@ if __name__ == '__main__':
     main = PlotWidget(15)
     main.setBackground('w')
     data = main.q
-    rect = RectItem(data)
+    rect = RectItem(data, main)
     main.mouse_moved.connect(rect.move)
     main.mouse_moved2.connect(rect.move2)
     main.mouse_moved3.connect(rect.move3)
@@ -282,6 +297,7 @@ if __name__ == '__main__':
     main.addItem(rect.hline4)
     pg.SignalProxy(main.scene().sigMouseMoved, rateLimit=60, slot=main.PlotCursor)
     main.plotItem.scene().sigMouseMoved.connect(main.PlotCursor)
+    item = main.getViewBox().allChildren(item=rect)
     main.show()
 
     sys.exit(app.exec_())
