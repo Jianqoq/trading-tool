@@ -18,6 +18,7 @@ class RectItem(pg.GraphicsObject):
         self.w = None
         self.x = None
         self.toggle = False
+        self.first_time = True
         self.highest = 0
         self.lowest = 0
         self.parent = parent
@@ -58,8 +59,7 @@ class RectItem(pg.GraphicsObject):
         self.hline3.sigDragged.connect(self.handle_sig_dragged2)
         self.hline4.sigDragged.connect(self.handle_sig_dragged3)
         self.generate_picture()
-        
-# general idea is from https://blog.csdn.net/u010580016/article/details/121584523
+
     def generate_picture(self):
         self.painter = QtGui.QPainter(self.picture)
         self.w = (self.data[1][0] - self.data[0][0]) / 3
@@ -86,11 +86,14 @@ class RectItem(pg.GraphicsObject):
 
     def paint(self, painter, option, widget=None):
         painter.drawPicture(0, 0, self.picture)
-        array = self.convert_painting_2_array(self.parent)
+        self.getViewBox().setLimits(xMin = 0)
+        left, right = [int(i) for i in self.getViewBox().state['viewRange'][0]]
+        self.getViewBox().setYRange(min(self.parent.data4[left:right]), max(self.parent.data5[left:right]))
 
-    def convert_painting_2_array(self, parent):
-        item = parent.getViewBox().allChildren(item=self)
-        exporter = ImageExporter(item[0])
+    def convert_painting_2_array(self, width, height):
+        exporter = ImageExporter(self.getViewBox())
+        exporter.parameters()['width'] = width
+        exporter.parameters()['height'] = height
         data = exporter.export(toBytes=True)
         img = data.convertToFormat(QtGui.QImage.Format_RGBA8888)
         ptr = img.constBits()
@@ -166,6 +169,7 @@ class PlotWidget(pg.PlotWidget):
     mouse_moved2 = QtCore.pyqtSignal(list)
     mouse_moved3 = QtCore.pyqtSignal(QPointF)
     key_pressed = QtCore.pyqtSignal(str)
+    trigger = QtCore.pyqtSignal(int, int)
 
     def __init__(self, intval):
         super().__init__()
@@ -192,6 +196,8 @@ class PlotWidget(pg.PlotWidget):
             self.data5.append(float(i[2]))
             self.data6.append(i[0])
             self.num += 1
+        self.high = max(self.data5)
+        self.low = min(self.data4)
         self.q = list(zip(self.data1, self.data2, self.data3, self.data4, self.data5))
         self.hl = self.q.pop()
         self.l = self.hl[3]
@@ -278,6 +284,10 @@ class PlotWidget(pg.PlotWidget):
         if event.key() == Qt.Key_Return:
             self.key_pressed.emit(self.p['price'])
 
+    def mouseReleaseEvent(self, event):
+        super(PlotWidget, self).mouseReleaseEvent(event)
+        if event.button() == Qt.LeftButton:
+            self.trigger.emit(3840, 2160)
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
@@ -289,6 +299,7 @@ if __name__ == '__main__':
     main.mouse_moved2.connect(rect.move2)
     main.mouse_moved3.connect(rect.move3)
     main.key_pressed.connect(rect.showlines)
+    main.trigger.connect(rect.convert_painting_2_array)
     main.addItem(rect)
     main.addItem(rect.pline)
     main.addItem(rect.vline)
