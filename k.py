@@ -297,7 +297,6 @@ if __name__ == '__main__':
     main.addItem(rect.hline4)
     pg.SignalProxy(main.scene().sigMouseMoved, rateLimit=60, slot=main.PlotCursor)
     main.plotItem.scene().sigMouseMoved.connect(main.PlotCursor)
-    item = main.getViewBox().allChildren(item=rect)
     main.show()
 
     sys.exit(app.exec_())
