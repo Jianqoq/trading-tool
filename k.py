@@ -1,7 +1,6 @@
 import sys
 import time
-from threading import *
-import cv2
+from threading import Thread
 import numpy as np
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
@@ -61,34 +60,37 @@ class RectItem(pg.GraphicsObject):
         self.generate_picture()
 
     def generate_picture(self):
-        self.painter = QtGui.QPainter(self.picture)
+        painter = QtGui.QPainter(self.picture)
         self.w = (self.data[1][0] - self.data[0][0]) / 3
-        self.painter.setPen(pg.mkPen('black'))
+        painter.setPen(pg.mkPen('black'))
         num = self.data[-1][0]
         op = self.data[-1][2]
         if (self.w and self.x) is not None:
-            for n, open, close, low, high in self.data:
-                self.painter.drawLine(QtCore.QPointF(n, low), QtCore.QPointF(n, high))
-                if close < open:
-                    self.painter.setBrush(pg.mkBrush(color=(0, 0, 0)))
+            try:
+                for n, open, close, low, high in self.data:
+                    painter.drawLine(QtCore.QPointF(n, low), QtCore.QPointF(n, high))
+                    if close < open:
+                        painter.setBrush(pg.mkBrush(color=(0, 0, 0)))
+                    else:
+                        painter.setBrush(pg.mkBrush('w'))
+
+                    painter.drawRect(QtCore.QRectF(n - self.w, open, self.w * 2, close - open))
+
+                painter.drawLine(QtCore.QPointF(num+1, self.lowest), QtCore.QPointF(num+1, self.highest))
+                if self.x > op:
+                    painter.setBrush(pg.mkBrush('w'))
                 else:
-                    self.painter.setBrush(pg.mkBrush('w'))
-
-                self.painter.drawRect(QtCore.QRectF(n - self.w, open, self.w * 2, close - open))
-
-            self.painter.drawLine(QtCore.QPointF(num+1, self.lowest), QtCore.QPointF(num+1, self.highest))
-            if self.x > op:
-                self.painter.setBrush(pg.mkBrush('w'))
-            else:
-               self.painter.setBrush(pg.mkBrush(color=(0, 0, 0)))
-            self.painter.drawRect(QtCore.QRectF(num+1 - self.w, op, self.w * 2, self.x - op))
-            self.painter.end()
+                   painter.setBrush(pg.mkBrush(color=(0, 0, 0)))
+                painter.drawRect(QtCore.QRectF(num+1 - self.w, op, self.w * 2, self.x - op))
+                painter.end()
+            except:
+                self.parent.close()
 
     def paint(self, painter, option, widget=None):
         painter.drawPicture(0, 0, self.picture)
         self.getViewBox().setLimits(xMin = 0)
         left, right = [int(i) for i in self.getViewBox().state['viewRange'][0]]
-        self.getViewBox().setYRange(min(self.parent.data4[left:right]), max(self.parent.data5[left:right]))
+        self.getViewBox().setYRange(min(self.parent.q[left:right], key=lambda x: x[3])[3], max(self.parent.q[left:right], key=lambda x: x[4])[4])
 
     def convert_painting_2_array(self, width, height):
         exporter = ImageExporter(self.getViewBox())
@@ -104,16 +106,19 @@ class RectItem(pg.GraphicsObject):
         return arr
 
     def handle_sig_dragged(self,obj):
+        self.parent.setCursor(self.cursor)
         self.hline2.setCursor(self.cursor)
         p = '%.2f' % obj.pos().y()
         self.line_label.setText(text=p)
 
     def handle_sig_dragged2(self,obj):
+        self.parent.setCursor(self.cursor)
         self.hline3.setCursor(self.cursor)
         p = '%.2f' % obj.pos().y()
         self.line_label2.setText(text=p)
 
     def handle_sig_dragged3(self,obj):
+        self.parent.setCursor(self.cursor)
         self.hline4.setCursor(self.cursor)
         p = '%.2f' % obj.pos().y()
         self.line_label3.setText(text=p)
@@ -122,19 +127,17 @@ class RectItem(pg.GraphicsObject):
         return QtCore.QRectF(self.picture.boundingRect())
 
     def move(self, x, highest, lowest):
-        p = float(x)
-        self.highest = float(highest[0])
-        self.lowest = float(lowest[0])
-        self.x = p
-        self.pline.setPos(p)
-        self.line_label4.setText(text=x)
+        self.highest = highest
+        self.lowest = lowest
+        self.x = x
+        self.pline.setPos(x)
+        self.line_label4.setText(text=str(x))
         self.prepareGeometryChange()
         self.generate_picture()
         self.update()
 
     def move2(self, x):
         self.data = x
-        self.prepareGeometryChange()
         self.generate_picture()
         self.update()
 
@@ -150,9 +153,7 @@ class RectItem(pg.GraphicsObject):
             self.pline.show()
             self.toggle = True
 
-    def showlines(self, price):
-
-        p = float(price)
+    def showlines(self, p):
         self.hline2.setPos(p)
         low, high = self.getViewBox().viewRange()[1]
         p2 = p + (high - p)*0.01
@@ -165,50 +166,31 @@ class RectItem(pg.GraphicsObject):
 
 
 class PlotWidget(pg.PlotWidget):
-    mouse_moved = QtCore.pyqtSignal(str, list, list)
+    mouse_moved = QtCore.pyqtSignal(float, float, float)
     mouse_moved2 = QtCore.pyqtSignal(list)
     mouse_moved3 = QtCore.pyqtSignal(QPointF)
-    key_pressed = QtCore.pyqtSignal(str)
+    key_pressed = QtCore.pyqtSignal(float)
     trigger = QtCore.pyqtSignal(int, int)
 
     def __init__(self, intval):
         super().__init__()
-        self.c = Spot(key='', secret='')
-        self.price = self.c.klines(symbol='BTCBUSD',interval='5m',limit=1000)
-        self.data1 = []
-        self.data2 = []
-        self.data3 = []
-        self.data4 = []
-        self.data5 = []
-        self.data6 = []
-        self.highest = []
-        self.lowest = []
+        self.c = Spot(key='',
+                      secret='')
+        price = self.c.klines(symbol='BTCBUSD',interval='1m',limit=1000)
+        self.p = 0
         self.lastone = []
         self.num = 0
         self.cishu = 1
         self.list = []
         self.list2 = []
-        for i in self.price:
-            self.data1.append(self.num)
-            self.data2.append(float(i[1]))
-            self.data3.append(float(i[4]))
-            self.data4.append(float(i[3]))
-            self.data5.append(float(i[2]))
-            self.data6.append(i[0])
-            self.num += 1
-        self.high = max(self.data5)
-        self.low = min(self.data4)
-        self.q = list(zip(self.data1, self.data2, self.data3, self.data4, self.data5))
+        self.q = [(index, float(i[1]), float(i[4]), float(i[3]), float(i[2])) for index, i in enumerate(price)]
         self.hl = self.q.pop()
         self.l = self.hl[3]
         self.h = self.hl[4]
         self.timer = self.dingshiqi(intval)
-        self.chufa()
+        self.setCursor(Qt.CrossCursor)
+        Thread(target=self.keepupdate).start()
         self.chufa2(intval)
-
-    def chufa(self):
-        thread = Thread(target=self.keepupdate)
-        thread.start()
 
     def chufa2(self, intval):
         thread = Thread(target=self.updatedata, args=(intval,))
@@ -216,47 +198,38 @@ class PlotWidget(pg.PlotWidget):
 
     def keepupdate(self):
         try:
-            while True:
-                self.p = self.c.ticker_price(symbol='BTCBUSD')
-                x = self.p['price']
-                if len(self.highest) == 0 and len(self.lowest) == 0:
-                    self.highest.append(x)
-                    self.lowest.append(x)
-                if x > self.highest[0]:
-                    self.highest.clear()
-                    self.highest.append(x)
-                if x < self.lowest[0]:
-                    self.lowest.clear()
-                    self.lowest.append(x)
-                self.mouse_moved.emit(self.p['price'], self.highest, self.lowest)
+            while 1:
+                p = self.c.ticker_price(symbol='BTCBUSD')
+                x = self.p = float(p['price'])
+                if x > self.h:
+                    self.h = x
+                if x < self.l:
+                    self.l = x
+                self.mouse_moved.emit(x, self.h, self.l)
                 time.sleep(0.2)
         except:
-            self.chufa()
+            Thread(target=self.keepupdate).start()
 
-    def updatedata(self, intval):
+    def updatedata(self, intval: int):
         try:
-            while True:
+            while 1:
+                print(self.timer)
                 time.sleep(self.timer)
                 self.timer = self.dingshiqi(intval)
                 if self.timer > 0:
-                    print(self.timer)
                     num = self.q[-1][0]
                     p = self.c.ticker_price(symbol='BTCBUSD')
-                    p1 = p['price']
-                    tup = (num + 1, self.q[-1][2], p['price'], self.lowest[0], self.highest[0])
-                    self.highest.clear()
-                    self.lowest.clear()
-                    self.highest.append(p1)
-                    self.lowest.append(p1)
+                    p1 = float(p['price'])
+                    tup = (num + 1, self.q[-1][2], p1, self.l, self.h)
+                    self.l = p1
+                    self.h = p1
                     self.q.append(tup)
                     self.cishu = 2
                     self.mouse_moved2.emit(self.q)
-                else:
-                    continue
         except:
             self.chufa2(intval)
 
-    def dingshiqi(self, intval):
+    def dingshiqi(self, intval: int):
             current = datetime.datetime.now().minute
             currentsec = datetime.datetime.now().second
             interval = intval
@@ -282,16 +255,20 @@ class PlotWidget(pg.PlotWidget):
     def keyPressEvent(self, event):
         super(PlotWidget, self).keyPressEvent(event)
         if event.key() == Qt.Key_Return:
-            self.key_pressed.emit(self.p['price'])
+            self.key_pressed.emit(self.p)
 
     def mouseReleaseEvent(self, event):
         super(PlotWidget, self).mouseReleaseEvent(event)
-        if event.button() == Qt.LeftButton:
-            self.trigger.emit(3840, 2160)
+        self.trigger.emit(1280, 1280)
+
+    def wheelEvent(self, event):
+        super(PlotWidget, self).wheelEvent(event)
+        self.trigger.emit(1280, 1280)
+
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    main = PlotWidget(15)
+    main = PlotWidget(1)
     main.setBackground('w')
     data = main.q
     rect = RectItem(data, main)
