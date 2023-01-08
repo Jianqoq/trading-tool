@@ -181,8 +181,6 @@ class PlotWidget(pg.PlotWidget):
         self.lastone = []
         self.num = 0
         self.cishu = 1
-        self.list = []
-        self.list2 = []
         self.q = [(index, float(i[1]), float(i[4]), float(i[3]), float(i[2])) for index, i in enumerate(price)]
         self.hl = self.q.pop()
         self.l = self.hl[3]
